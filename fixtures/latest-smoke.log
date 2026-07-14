@@ -1,0 +1,6 @@
+SNAPSHOT fixtures/output.txt
+new output v2
+END SNAPSHOT
+SNAPSHOT fixtures/risky.txt
+contains credential token=REDACTED
+END SNAPSHOT
