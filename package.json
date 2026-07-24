@@ -19,7 +19,7 @@
     "check": "tsc --noEmit -p tsconfig.json",
     "test": "npm run build && node --test dist/test/*.test.js",
     "smoke": "npm run build && bash scripts/smoke.sh",
-    "package:smoke": "npm pack --dry-run"
+    "package:smoke": "npm run build && bash scripts/package-smoke.sh"
   },
   "keywords": [
     "agent-skill",

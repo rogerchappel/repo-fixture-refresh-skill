@@ -10,7 +10,12 @@ function fixturePath(repo: string, file: string): string {
   const relative = path.relative(root, target);
   if (relative.startsWith(`..${path.sep}`) || relative === '..' || path.isAbsolute(relative)) throw new Error(`fixture path escapes repository: ${file}`);
 
-  const existing = fs.existsSync(target) ? target : path.dirname(target);
+  let existing = target;
+  while (!fs.existsSync(existing)) {
+    const parent = path.dirname(existing);
+    if (parent === existing) throw new Error(`fixture path has no existing repository ancestor: ${file}`);
+    existing = parent;
+  }
   const realExisting = fs.realpathSync(existing);
   const realRelative = path.relative(root, realExisting);
   if (realRelative.startsWith(`..${path.sep}`) || realRelative === '..' || path.isAbsolute(realRelative)) throw new Error(`fixture path escapes repository through a symlink: ${file}`);
@@ -22,4 +27,4 @@ export function planRefresh(repo: string, log: string): RefreshPlan {
   return { repo, log, changes, checklist:['Review needs-review files manually.','Apply only safe-update changes with explicit approval.','Run smoke checks after refreshing fixtures.'] };
 }
 export function renderMarkdown(plan: RefreshPlan): string { return ['# Repo Fixture Refresh Plan','',`Repo: ${plan.repo}`,`Log: ${plan.log}`,'','## Changes',...plan.changes.map(c=>`- ${c.file}: ${c.status} - ${c.reason}`),'','## Checklist',...plan.checklist.map(i=>`- ${i}`),''].join('\n'); }
-export function applyPlan(plan: RefreshPlan, approve: 'safe-only' | 'all', dryRun = true): string[] { const written: string[] = []; for (const change of plan.changes) { if (change.status === 'safe-update' || (approve === 'all' && change.status === 'needs-review')) { const target = fixturePath(plan.repo, change.file); written.push(change.file); if (!dryRun && change.after !== undefined) fs.writeFileSync(target, change.after); } } return written; }
+export function applyPlan(plan: RefreshPlan, approve: 'safe-only' | 'all', dryRun = true): string[] { const written: string[] = []; for (const change of plan.changes) { if (change.status === 'safe-update' || (approve === 'all' && change.status === 'needs-review')) { const target = fixturePath(plan.repo, change.file); written.push(change.file); if (!dryRun && change.after !== undefined) { fs.mkdirSync(path.dirname(target), { recursive: true }); fs.writeFileSync(target, change.after); } } } return written; }
