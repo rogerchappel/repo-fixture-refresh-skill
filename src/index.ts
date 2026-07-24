@@ -1,6 +1,13 @@
 import fs from 'node:fs'; import path from 'node:path';
 export interface RefreshChange { file: string; status: 'unchanged' | 'safe-update' | 'needs-review'; reason: string; before?: string; after?: string; }
 export interface RefreshPlan { repo: string; log: string; changes: RefreshChange[]; checklist: string[]; }
+export interface RefreshConflict { file: string; reason: string; }
+export class RefreshConflictError extends Error {
+  constructor(public readonly conflicts: RefreshConflict[]) {
+    super(`fixture refresh conflicts:\n${conflicts.map(conflict => `- ${conflict.file}: ${conflict.reason}`).join('\n')}`);
+    this.name = 'RefreshConflictError';
+  }
+}
 export function parseSnapshots(text: string): Record<string,string> { const out: Record<string,string> = {}; const re = /SNAPSHOT\s+([^\n]+)\n([\s\S]*?)\nEND SNAPSHOT/g; let m: RegExpExecArray | null; while ((m = re.exec(text))) out[m[1].trim()] = m[2] + '\n'; return out; }
 function risky(text: string): boolean { return /(token=|secret|password|credential)/i.test(text); }
 function fixturePath(repo: string, file: string): string {
@@ -23,8 +30,32 @@ function fixturePath(repo: string, file: string): string {
 }
 export function planRefresh(repo: string, log: string): RefreshPlan {
   const text = fs.readFileSync(log,'utf8'); const snapshots = parseSnapshots(text); const changes: RefreshChange[] = [];
-  for (const [rel, after] of Object.entries(snapshots)) { const abs = fixturePath(repo, rel); const before = fs.existsSync(abs) ? fs.readFileSync(abs,'utf8') : ''; if (before === after) changes.push({file:rel,status:'unchanged',reason:'recorded output already matches latest log'}); else if (risky(after)) changes.push({file:rel,status:'needs-review',reason:'latest output contains secret-like or credential-like text',before,after}); else changes.push({file:rel,status:'safe-update',reason:'fixture differs and latest output has no risky marker',before,after}); }
+  for (const [rel, after] of Object.entries(snapshots)) { const abs = fixturePath(repo, rel); const before = fs.existsSync(abs) ? fs.readFileSync(abs,'utf8') : undefined; if (before === after) changes.push({file:rel,status:'unchanged',reason:'recorded output already matches latest log'}); else if (risky(after)) changes.push({file:rel,status:'needs-review',reason:'latest output contains secret-like or credential-like text',before,after}); else changes.push({file:rel,status:'safe-update',reason:'fixture differs and latest output has no risky marker',before,after}); }
   return { repo, log, changes, checklist:['Review needs-review files manually.','Apply only safe-update changes with explicit approval.','Run smoke checks after refreshing fixtures.'] };
 }
 export function renderMarkdown(plan: RefreshPlan): string { return ['# Repo Fixture Refresh Plan','',`Repo: ${plan.repo}`,`Log: ${plan.log}`,'','## Changes',...plan.changes.map(c=>`- ${c.file}: ${c.status} - ${c.reason}`),'','## Checklist',...plan.checklist.map(i=>`- ${i}`),''].join('\n'); }
-export function applyPlan(plan: RefreshPlan, approve: 'safe-only' | 'all', dryRun = true): string[] { const written: string[] = []; for (const change of plan.changes) { if (change.status === 'safe-update' || (approve === 'all' && change.status === 'needs-review')) { const target = fixturePath(plan.repo, change.file); written.push(change.file); if (!dryRun && change.after !== undefined) { fs.mkdirSync(path.dirname(target), { recursive: true }); fs.writeFileSync(target, change.after); } } } return written; }
+export function applyPlan(plan: RefreshPlan, approve: 'safe-only' | 'all', dryRun = true): string[] {
+  const approved = plan.changes.filter(change => change.status === 'safe-update' || (approve === 'all' && change.status === 'needs-review'));
+  const targets = approved.map(change => ({ change, target: fixturePath(plan.repo, change.file) }));
+  const conflicts: RefreshConflict[] = [];
+
+  for (const { change, target } of targets) {
+    if (change.before === undefined) {
+      if (fs.existsSync(target)) conflicts.push({ file: change.file, reason: 'target was created after this plan was generated' });
+    } else if (!fs.existsSync(target)) {
+      conflicts.push({ file: change.file, reason: 'target was deleted after this plan was generated' });
+    } else if (fs.readFileSync(target, 'utf8') !== change.before) {
+      conflicts.push({ file: change.file, reason: 'target was modified after this plan was generated' });
+    }
+  }
+
+  if (conflicts.length > 0) throw new RefreshConflictError(conflicts);
+  if (!dryRun) {
+    for (const { change, target } of targets) {
+      if (change.after === undefined) continue;
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, change.after);
+    }
+  }
+  return approved.map(change => change.file);
+}
