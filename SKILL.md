@@ -16,8 +16,12 @@ Default commands only read local files and write requested reports. Do not use t
 
 1. Run the planner against fixtures or logs.
 2. Review JSON and Markdown output.
-3. Run the check command.
-4. Paste evidence into the release-candidate PR.
+3. Run a dry-run apply. It rechecks that every target still matches the state
+   captured by the plan.
+4. If the command reports a conflict, regenerate and review the plan. Do not
+   retry the stale plan: apply exits unsuccessfully and writes nothing whenever
+   any approved target was modified, deleted, or created.
+5. Paste evidence into the release-candidate PR.
 
 ## Examples
 
