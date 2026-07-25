@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Expose the documented package-root library import with JavaScript and
+  TypeScript entrypoints, verified from the packed consumer artifact.
 - Prevent saved refresh plans from overwriting fixture changes made after
   planning, including newly created and deleted targets.
 - Abort mixed applies before any write and report every stale target in dry-run

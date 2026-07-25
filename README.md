@@ -20,6 +20,18 @@ conflicts, exits unsuccessfully, and writes nothing. This check also runs during
 
 Import from `repo-fixture-refresh-skill` to build local-first automation around the same deterministic planner.
 
+```js
+import { planRefresh, renderMarkdown } from 'repo-fixture-refresh-skill';
+
+const plan = planRefresh('fixtures/sample-repo', 'fixtures/latest-smoke.log');
+console.log(renderMarkdown(plan));
+```
+
+The package root is the supported library import surface. It exposes the
+planner, Markdown renderer, apply function, snapshot parser, conflict error,
+and their TypeScript declarations; consumers should not import files from
+`dist` directly.
+
 ## Safety Notes
 
 - No live connector calls.

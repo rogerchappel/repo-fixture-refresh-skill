@@ -3,6 +3,14 @@
   "version": "0.1.0",
   "description": "Plans stale fixture refreshes from latest local command logs without unsafe rewrites.",
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "bin": {
     "repo-fixture-refresh": "dist/cli.js"
   },
