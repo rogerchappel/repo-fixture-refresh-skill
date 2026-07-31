@@ -11,6 +11,11 @@ npm exec -- repo-fixture-refresh plan --repo fixtures/sample-repo --log fixtures
 npm exec -- repo-fixture-refresh apply .tmp/fixture-refresh.json --approve safe-only --repo fixtures/sample-repo --dry-run
 ```
 
+`plan` requires `--log`; `--repo` defaults to the current directory, and
+`--out` and `--json` select optional output files. `apply` accepts one plan JSON
+path, optional `--repo`, `--dry-run`, and `--approve safe-only|all` (default:
+`safe-only`). Unknown, repeated, or incomplete options are rejected.
+
 Apply rechecks every approved target against the state captured by `plan`. If a
 target was modified, deleted, or created since planning, the command reports all
 conflicts, exits unsuccessfully, and writes nothing. This check also runs during

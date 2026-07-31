@@ -5,6 +5,11 @@ repo-fixture-refresh plan --repo fixtures/sample-repo --log fixtures/latest-smok
 repo-fixture-refresh apply .tmp/fixture-refresh.json --approve safe-only --repo fixtures/sample-repo --dry-run
 ```
 
+Accepted `plan` options are required `--log <log>` plus optional
+`--repo <path>`, `--out <file>`, and `--json <file>`. `apply` requires one plan
+JSON path and accepts `--repo <path>`, `--dry-run`, and
+`--approve safe-only|all` (default `safe-only`). Each option may appear once.
+
 If a fixture changes between these commands, apply reports the stale target:
 
 ```text
