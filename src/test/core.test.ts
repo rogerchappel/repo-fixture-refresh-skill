@@ -1,5 +1,6 @@
 import test from 'node:test'; import assert from 'node:assert/strict'; import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path'; import { spawnSync } from 'node:child_process';
 import { planRefresh, applyPlan, RefreshConflictError } from '../index.js';
+const cli = (...args: string[]) => spawnSync(process.execPath, ['dist/cli.js', ...args], { encoding: 'utf8' });
 test('plans safe and risky fixture changes', () => { const plan = planRefresh('fixtures/sample-repo', 'fixtures/latest-smoke.log'); assert.equal(plan.changes.find(c=>c.file==='fixtures/output.txt')?.status, 'safe-update'); assert.equal(plan.changes.find(c=>c.file==='fixtures/risky.txt')?.status, 'needs-review'); });
 test('dry run apply writes only safe updates by default', () => { const plan = planRefresh('fixtures/sample-repo', 'fixtures/latest-smoke.log'); assert.deepEqual(applyPlan(plan, 'safe-only', true), ['fixtures/output.txt']); });
 test('plans and writes a fixture whose parent directories do not exist', () => {
@@ -91,6 +92,46 @@ test('CLI reports stale-plan conflicts and exits unsuccessfully', () => {
   assert.match(result.stderr, /fixture refresh conflicts:\n- fixture\.txt: target was modified after this plan was generated/);
   assert.equal(result.stdout, '');
   assert.equal(fs.readFileSync(target, 'utf8'), 'newer user change\n');
+  fs.rmSync(root, { recursive: true, force: true });
+});
+test('CLI plan and apply accept the documented argument forms', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'repo-fixture-refresh-cli-'));
+  const repo = path.join(root, 'repo'); fs.mkdirSync(repo);
+  const log = path.join(root, 'latest.log'); fs.writeFileSync(log, 'SNAPSHOT fixture.txt\nplanned\nEND SNAPSHOT\n');
+  const planFile = path.join(root, 'plan.json');
+
+  const planned = cli('plan', '--repo', repo, '--log', log, '--json', planFile);
+  assert.equal(planned.status, 0, planned.stderr);
+  assert.equal(planned.stdout, '');
+  assert.equal(fs.existsSync(planFile), true);
+  const applied = cli('apply', planFile, '--approve', 'safe-only', '--repo', repo, '--dry-run');
+  assert.equal(applied.status, 0, applied.stderr);
+  assert.equal(applied.stdout, 'would write: fixture.txt\n');
+  assert.equal(fs.existsSync(path.join(repo, 'fixture.txt')), false);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+test('CLI rejects invalid arguments before creating output', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'repo-fixture-refresh-cli-'));
+  const repo = path.join(root, 'repo'); fs.mkdirSync(repo);
+  const log = path.join(root, 'latest.log'); fs.writeFileSync(log, 'SNAPSHOT fixture.txt\nplanned\nEND SNAPSHOT\n');
+  const output = path.join(root, 'plan.json');
+  const cases: Array<{ args: string[]; message: RegExp }> = [
+    { args: ['plan', '--log', log, '--bogus'], message: /unknown option: --bogus/ },
+    { args: ['plan', '--log', log, '--log', log], message: /duplicate option: --log/ },
+    { args: ['plan', '--log'], message: /missing value for --log/ },
+    { args: ['plan', '--log', log, 'extra'], message: /unexpected argument: extra/ },
+    { args: ['apply', output, '--approve', 'sometimes'], message: /invalid --approve value: sometimes/ },
+    { args: ['apply', output, 'extra'], message: /unexpected argument: extra/ },
+    { args: ['apply', output, '--dry-run', '--dry-run'], message: /duplicate option: --dry-run/ },
+  ];
+  for (const example of cases) {
+    const result = cli(...example.args);
+    assert.equal(result.status, 1, example.args.join(' '));
+    assert.match(result.stderr, example.message);
+    assert.match(result.stderr, /usage: repo-fixture-refresh/);
+    assert.equal(result.stdout, '');
+    assert.equal(fs.existsSync(output), false);
+  }
   fs.rmSync(root, { recursive: true, force: true });
 });
 test('rejects fixture paths outside the selected repository', () => {
