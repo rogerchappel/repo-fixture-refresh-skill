@@ -29,3 +29,9 @@ Default commands only read local files and write requested reports. Do not use t
 repo-fixture-refresh plan --repo fixtures/sample-repo --log fixtures/latest-smoke.log --out .tmp/fixture-refresh.md --json .tmp/fixture-refresh.json
 repo-fixture-refresh apply .tmp/fixture-refresh.json --approve safe-only --repo fixtures/sample-repo --dry-run
 ```
+
+`--log` is required for `plan`; `--repo` defaults to `.`. The optional plan
+outputs are `--out <file>` and `--json <file>`. `apply` takes exactly one plan
+JSON path, with optional `--repo <path>`, `--dry-run`, and
+`--approve safe-only|all`; approval defaults to `safe-only`. The CLI rejects
+unknown or duplicate options, missing option values, and extra arguments.
