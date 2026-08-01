@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reject malformed or ambiguous snapshot logs before creating plan output,
+  while preserving newline fidelity for valid multi-snapshot logs.
 - Expose the documented package-root library import with JavaScript and
   TypeScript entrypoints, verified from the packed consumer artifact.
 - Prevent saved refresh plans from overwriting fixture changes made after
