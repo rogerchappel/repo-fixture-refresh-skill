@@ -8,7 +8,56 @@ export class RefreshConflictError extends Error {
     this.name = 'RefreshConflictError';
   }
 }
-export function parseSnapshots(text: string): Record<string,string> { const out: Record<string,string> = {}; const re = /SNAPSHOT\s+([^\n]+)\n([\s\S]*?)\nEND SNAPSHOT/g; let m: RegExpExecArray | null; while ((m = re.exec(text))) out[m[1].trim()] = m[2] + '\n'; return out; }
+function validateSnapshotPath(file: string, line: number): void {
+  const segments = file.split(/[\\/]/);
+  if (
+    file.includes('\0') ||
+    path.posix.isAbsolute(file) ||
+    path.win32.isAbsolute(file) ||
+    file === '.' ||
+    segments.some(segment => segment === '' || segment === '.' || segment === '..')
+  ) throw new Error(`line ${line}: invalid snapshot path: ${file}`);
+}
+export function parseSnapshots(text: string): Record<string,string> {
+  const snapshots: Record<string,string> = {};
+  let active: { file: string; line: number; bodyStart: number } | undefined;
+  let offset = 0;
+  let lineNumber = 1;
+
+  while (offset < text.length) {
+    const lineStart = offset;
+    while (offset < text.length && text[offset] !== '\n' && text[offset] !== '\r') offset++;
+    const line = text.slice(lineStart, offset);
+    if (text[offset] === '\r' && text[offset + 1] === '\n') offset += 2;
+    else if (offset < text.length) offset++;
+    const nextLineStart = offset;
+    const start = /^SNAPSHOT(?:[ \t]+(.*))?$/.exec(line);
+
+    if (active) {
+      if (start) {
+        const nextFile = (start[1] ?? '').trim();
+        throw new Error(`line ${lineNumber}: started snapshot "${nextFile}" before ending "${active.file}"`);
+      }
+      if (line === 'END SNAPSHOT') {
+        snapshots[active.file] = text.slice(active.bodyStart, lineStart);
+        active = undefined;
+      }
+    } else if (start) {
+      const file = (start[1] ?? '').trim();
+      if (!file) throw new Error(`line ${lineNumber}: snapshot path is empty`);
+      validateSnapshotPath(file, lineNumber);
+      if (Object.hasOwn(snapshots, file)) throw new Error(`line ${lineNumber}: duplicate snapshot path: ${file}`);
+      active = { file, line: lineNumber, bodyStart: nextLineStart };
+    } else if (line === 'END SNAPSHOT') {
+      throw new Error(`line ${lineNumber}: unexpected END SNAPSHOT`);
+    }
+    lineNumber++;
+  }
+
+  if (active) throw new Error(`line ${active.line}: snapshot "${active.file}" is missing END SNAPSHOT`);
+  if (Object.keys(snapshots).length === 0) throw new Error('snapshot log contains no snapshots');
+  return snapshots;
+}
 function risky(text: string): boolean { return /(token=|secret|password|credential)/i.test(text); }
 function fixturePath(repo: string, file: string): string {
   if (!file || file.includes('\0') || path.isAbsolute(file)) throw new Error(`invalid fixture path: ${file}`);

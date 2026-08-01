@@ -21,6 +21,27 @@ target was modified, deleted, or created since planning, the command reports all
 conflicts, exits unsuccessfully, and writes nothing. This check also runs during
 `--dry-run`, so regenerate the plan and review it again before retrying.
 
+### Snapshot log format
+
+A log may contain ordinary output around one or more snapshot blocks. Marker
+lines and paths are case-sensitive:
+
+```text
+SNAPSHOT fixtures/output.txt
+captured output, preserved byte-for-byte
+END SNAPSHOT
+```
+
+Each `SNAPSHOT <path>` must have one matching `END SNAPSHOT` line. Paths must be
+non-empty, repository-relative file paths without `.` or `..` segments, and may
+appear only once per log. Snapshot bodies may be empty and retain their original
+LF or CRLF newlines. Blocks are returned in log order.
+
+Planning rejects logs with no snapshots, stray or missing end markers, nested
+starts, invalid paths, and duplicate paths. The error identifies the offending
+line when applicable. The CLI exits with status 1 and creates neither `--out`
+nor `--json` output when snapshot parsing fails.
+
 ## Library
 
 Import from `repo-fixture-refresh-skill` to build local-first automation around the same deterministic planner.

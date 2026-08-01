@@ -1,8 +1,46 @@
 import test from 'node:test'; import assert from 'node:assert/strict'; import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path'; import { spawnSync } from 'node:child_process';
-import { planRefresh, applyPlan, RefreshConflictError } from '../index.js';
+import { planRefresh, applyPlan, parseSnapshots, RefreshConflictError } from '../index.js';
 const cli = (...args: string[]) => spawnSync(process.execPath, ['dist/cli.js', ...args], { encoding: 'utf8' });
 test('plans safe and risky fixture changes', () => { const plan = planRefresh('fixtures/sample-repo', 'fixtures/latest-smoke.log'); assert.equal(plan.changes.find(c=>c.file==='fixtures/output.txt')?.status, 'safe-update'); assert.equal(plan.changes.find(c=>c.file==='fixtures/risky.txt')?.status, 'needs-review'); });
 test('dry run apply writes only safe updates by default', () => { const plan = planRefresh('fixtures/sample-repo', 'fixtures/latest-smoke.log'); assert.deepEqual(applyPlan(plan, 'safe-only', true), ['fixtures/output.txt']); });
+test('parses multiple snapshots and preserves their body newlines', () => {
+  assert.deepEqual(parseSnapshots('prefix\r\nSNAPSHOT first.txt\r\nfirst\r\nEND SNAPSHOT\r\nSNAPSHOT nested/second.txt\nsecond\n\nEND SNAPSHOT\n'), {
+    'first.txt': 'first\r\n',
+    'nested/second.txt': 'second\n\n',
+  });
+});
+test('rejects malformed snapshot framing with actionable errors', () => {
+  const cases: Array<{ input: string; message: RegExp }> = [
+    { input: 'ordinary command output\n', message: /snapshot log contains no snapshots/ },
+    { input: 'END SNAPSHOT\n', message: /line 1: unexpected END SNAPSHOT/ },
+    { input: 'SNAPSHOT fixture.txt\nunterminated\n', message: /line 1: snapshot "fixture\.txt" is missing END SNAPSHOT/ },
+    { input: 'SNAPSHOT first.txt\nfirst\nSNAPSHOT second.txt\nsecond\nEND SNAPSHOT\n', message: /line 3: started snapshot "second\.txt" before ending "first\.txt"/ },
+  ];
+  for (const example of cases) assert.throws(() => parseSnapshots(example.input), example.message);
+});
+test('rejects empty, invalid, and duplicate snapshot paths', () => {
+  const cases: Array<{ input: string; message: RegExp }> = [
+    { input: 'SNAPSHOT   \nbody\nEND SNAPSHOT\n', message: /line 1: snapshot path is empty/ },
+    { input: 'SNAPSHOT ../outside.txt\nbody\nEND SNAPSHOT\n', message: /line 1: invalid snapshot path: \.\.\/outside\.txt/ },
+    { input: 'SNAPSHOT /tmp/outside.txt\nbody\nEND SNAPSHOT\n', message: /line 1: invalid snapshot path: \/tmp\/outside\.txt/ },
+    { input: 'SNAPSHOT fixture.txt\nfirst\nEND SNAPSHOT\nSNAPSHOT fixture.txt\nsecond\nEND SNAPSHOT\n', message: /line 4: duplicate snapshot path: fixture\.txt/ },
+  ];
+  for (const example of cases) assert.throws(() => parseSnapshots(example.input), example.message);
+});
+test('CLI rejects invalid logs without creating either plan output', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'repo-fixture-refresh-cli-'));
+  const repo = path.join(root, 'repo'); fs.mkdirSync(repo);
+  const log = path.join(root, 'invalid.log'); fs.writeFileSync(log, 'SNAPSHOT fixture.txt\nunterminated\n');
+  const markdown = path.join(root, 'plan.md'); const json = path.join(root, 'plan.json');
+
+  const result = cli('plan', '--repo', repo, '--log', log, '--out', markdown, '--json', json);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /snapshot "fixture\.txt" is missing END SNAPSHOT/);
+  assert.equal(result.stdout, '');
+  assert.equal(fs.existsSync(markdown), false);
+  assert.equal(fs.existsSync(json), false);
+  fs.rmSync(root, { recursive: true, force: true });
+});
 test('plans and writes a fixture whose parent directories do not exist', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'repo-fixture-refresh-'));
   const repo = path.join(root, 'repo'); fs.mkdirSync(repo);
