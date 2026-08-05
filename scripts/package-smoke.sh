@@ -7,6 +7,10 @@ trap 'rm -rf "$smoke_root"' EXIT
 
 npm pack --pack-destination "$smoke_root" >/dev/null
 package_tarball=$(find "$smoke_root" -maxdepth 1 -name '*.tgz' -print -quit)
+if tar -tzf "$package_tarball" | grep -q '^package/dist/test/'; then
+  echo 'package contains compiled test artifacts under dist/test' >&2
+  exit 1
+fi
 mkdir "$smoke_root/consumer"
 cd "$smoke_root/consumer"
 npm init --yes >/dev/null
