@@ -8,6 +8,30 @@ export class RefreshConflictError extends Error {
     this.name = 'RefreshConflictError';
   }
 }
+function planObject(value: unknown, field: string): asserts value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new Error(`${field} must be an object`);
+}
+function planString(value: unknown, field: string): asserts value is string {
+  if (typeof value !== 'string') throw new Error(`${field} must be a string`);
+}
+export function validateRefreshPlan(value: unknown): asserts value is RefreshPlan {
+  planObject(value, 'plan');
+  planString(value.repo, 'plan.repo');
+  planString(value.log, 'plan.log');
+  if (!Array.isArray(value.checklist)) throw new Error('plan.checklist must be an array');
+  value.checklist.forEach((item, index) => planString(item, `plan.checklist[${index}]`));
+  if (!Array.isArray(value.changes)) throw new Error('plan.changes must be an array');
+  value.changes.forEach((change, index) => {
+    const field = `plan.changes[${index}]`;
+    planObject(change, field);
+    planString(change.file, `${field}.file`);
+    planString(change.status, `${field}.status`);
+    if (!['unchanged', 'safe-update', 'needs-review'].includes(change.status)) throw new Error(`${field}.status must be unchanged, safe-update, or needs-review`);
+    planString(change.reason, `${field}.reason`);
+    if (change.before !== undefined) planString(change.before, `${field}.before`);
+    if (change.after !== undefined) planString(change.after, `${field}.after`);
+  });
+}
 function validateSnapshotPath(file: string, line: number): void {
   const segments = file.split(/[\\/]/);
   if (
@@ -84,6 +108,7 @@ export function planRefresh(repo: string, log: string): RefreshPlan {
 }
 export function renderMarkdown(plan: RefreshPlan): string { return ['# Repo Fixture Refresh Plan','',`Repo: ${plan.repo}`,`Log: ${plan.log}`,'','## Changes',...plan.changes.map(c=>`- ${c.file}: ${c.status} - ${c.reason}`),'','## Checklist',...plan.checklist.map(i=>`- ${i}`),''].join('\n'); }
 export function applyPlan(plan: RefreshPlan, approve: 'safe-only' | 'all', dryRun = true): string[] {
+  validateRefreshPlan(plan);
   const approved = plan.changes.filter(change => change.status === 'safe-update' || (approve === 'all' && change.status === 'needs-review'));
   const targets = approved.map(change => ({ change, target: fixturePath(plan.repo, change.file) }));
   const conflicts: RefreshConflict[] = [];
