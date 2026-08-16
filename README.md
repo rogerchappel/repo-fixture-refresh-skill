@@ -21,6 +21,20 @@ target was modified, deleted, or created since planning, the command reports all
 conflicts, exits unsuccessfully, and writes nothing. This check also runs during
 `--dry-run`, so regenerate the plan and review it again before retrying.
 
+### Saved plan format
+
+Saved plans must be JSON objects with string `repo` and `log` fields, a
+`checklist` array of strings, and a `changes` array. Every change is an object
+with string `file`, `reason`, and `status` fields. `status` must be `unchanged`,
+`safe-update`, or `needs-review`; optional `before` and `after` fields must be
+strings when present. Additional fields are ignored for forward compatibility.
+
+Both the library `applyPlan` function and the CLI validate this contract before
+checking or writing any target. Invalid plans fail with a field-specific message
+such as `plan.changes[0].status must be unchanged, safe-update, or needs-review`;
+the CLI exits with status 1 and no fixture is written. A `--repo` override does
+not bypass validation of the saved plan.
+
 ### Snapshot log format
 
 A log may contain ordinary output around one or more snapshot blocks. Marker
@@ -54,7 +68,7 @@ console.log(renderMarkdown(plan));
 ```
 
 The package root is the supported library import surface. It exposes the
-planner, Markdown renderer, apply function, snapshot parser, conflict error,
+planner, Markdown renderer, apply function, saved-plan validator, snapshot parser, conflict error,
 and their TypeScript declarations; consumers should not import files from
 `dist` directly.
 
