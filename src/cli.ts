@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
-import { planRefresh, renderMarkdown, applyPlan } from './index.js';
+import { planRefresh, renderMarkdown, applyPlan, validateRefreshPlan } from './index.js';
 
 const usage = 'usage: repo-fixture-refresh plan --log <log> [--repo <path>] [--out <file>] [--json <file>]\n' +
   '       repo-fixture-refresh apply <plan.json> [--repo <path>] [--approve safe-only|all] [--dry-run]';
@@ -49,7 +49,8 @@ try {
     if (parsed.positionals.length > 1) throw new Error(`unexpected argument: ${parsed.positionals[1]}`);
     const approval = parsed.values.get('--approve') ?? 'safe-only';
     if (approval !== 'safe-only' && approval !== 'all') throw new Error(`invalid --approve value: ${approval}`);
-    const plan = JSON.parse(fs.readFileSync(parsed.positionals[0]!, 'utf8'));
+    const plan: unknown = JSON.parse(fs.readFileSync(parsed.positionals[0]!, 'utf8'));
+    validateRefreshPlan(plan);
     const repo = parsed.values.get('--repo');
     if (repo) plan.repo = repo;
     const dryRun = parsed.flags.has('--dry-run');
