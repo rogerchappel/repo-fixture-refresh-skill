@@ -1,8 +1,55 @@
 import test from 'node:test'; import assert from 'node:assert/strict'; import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path'; import { spawnSync } from 'node:child_process';
-import { planRefresh, applyPlan, parseSnapshots, RefreshConflictError } from '../index.js';
+import { planRefresh, applyPlan, parseSnapshots, RefreshConflictError, validateRefreshPlan } from '../index.js';
 const cli = (...args: string[]) => spawnSync(process.execPath, ['dist/cli.js', ...args], { encoding: 'utf8' });
 test('plans safe and risky fixture changes', () => { const plan = planRefresh('fixtures/sample-repo', 'fixtures/latest-smoke.log'); assert.equal(plan.changes.find(c=>c.file==='fixtures/output.txt')?.status, 'safe-update'); assert.equal(plan.changes.find(c=>c.file==='fixtures/risky.txt')?.status, 'needs-review'); });
 test('dry run apply writes only safe updates by default', () => { const plan = planRefresh('fixtures/sample-repo', 'fixtures/latest-smoke.log'); assert.deepEqual(applyPlan(plan, 'safe-only', true), ['fixtures/output.txt']); });
+test('validates a generated plan after a JSON round trip', () => {
+  const plan: unknown = JSON.parse(JSON.stringify(planRefresh('fixtures/sample-repo', 'fixtures/latest-smoke.log')));
+  validateRefreshPlan(plan);
+  assert.deepEqual(applyPlan(plan, 'safe-only', true), ['fixtures/output.txt']);
+});
+test('rejects malformed saved-plan roots and collection fields', () => {
+  const cases: Array<[unknown, RegExp]> = [
+    [null, /plan must be an object/],
+    [[], /plan must be an object/],
+    [{ repo: 1, log: '', changes: [], checklist: [] }, /plan\.repo must be a string/],
+    [{ repo: '.', log: 1, changes: [], checklist: [] }, /plan\.log must be a string/],
+    [{ repo: '.', log: '', changes: {}, checklist: [] }, /plan\.changes must be an array/],
+    [{ repo: '.', log: '', changes: [], checklist: 'review' }, /plan\.checklist must be an array/],
+    [{ repo: '.', log: '', changes: [], checklist: ['review', 2] }, /plan\.checklist\[1\] must be a string/],
+  ];
+  for (const [value, message] of cases) assert.throws(() => validateRefreshPlan(value), message);
+});
+test('rejects malformed saved-plan change fields and statuses', () => {
+  const base = { repo: '.', log: '', checklist: [] };
+  const cases: Array<[unknown, RegExp]> = [
+    [{ ...base, changes: [null] }, /plan\.changes\[0\] must be an object/],
+    [{ ...base, changes: [{ file: 1, status: 'safe-update', reason: '' }] }, /plan\.changes\[0\]\.file must be a string/],
+    [{ ...base, changes: [{ file: 'x', status: 1, reason: '' }] }, /plan\.changes\[0\]\.status must be a string/],
+    [{ ...base, changes: [{ file: 'x', status: 'unsafe', reason: '' }] }, /plan\.changes\[0\]\.status must be unchanged, safe-update, or needs-review/],
+    [{ ...base, changes: [{ file: 'x', status: 'safe-update', reason: 1 }] }, /plan\.changes\[0\]\.reason must be a string/],
+    [{ ...base, changes: [{ file: 'x', status: 'safe-update', reason: '', before: null }] }, /plan\.changes\[0\]\.before must be a string/],
+    [{ ...base, changes: [{ file: 'x', status: 'safe-update', reason: '', after: 1 }] }, /plan\.changes\[0\]\.after must be a string/],
+  ];
+  for (const [value, message] of cases) assert.throws(() => validateRefreshPlan(value), message);
+});
+test('library rejects malformed plans before accessing the repository', () => {
+  const malformed = { repo: '/path/that/does/not/exist', log: '', changes: {}, checklist: [] };
+  assert.throws(() => applyPlan(malformed as never, 'safe-only', false), /plan\.changes must be an array/);
+});
+test('CLI rejects malformed plans without writing fixtures', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'repo-fixture-refresh-cli-'));
+  const repo = path.join(root, 'repo'); fs.mkdirSync(repo);
+  const target = path.join(repo, 'fixture.txt'); fs.writeFileSync(target, 'original\n');
+  const planFile = path.join(root, 'plan.json');
+  fs.writeFileSync(planFile, JSON.stringify({ repo, log: '', checklist: [], changes: [{ file: 'fixture.txt', status: 'invalid', reason: '', before: 'original\n', after: 'changed\n' }] }));
+  const result = cli('apply', planFile, '--repo', repo);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /plan\.changes\[0\]\.status must be unchanged, safe-update, or needs-review/);
+  assert.equal(result.stdout, '');
+  assert.equal(fs.readFileSync(target, 'utf8'), 'original\n');
+  fs.rmSync(root, { recursive: true, force: true });
+});
 test('parses multiple snapshots and preserves their body newlines', () => {
   assert.deepEqual(parseSnapshots('prefix\r\nSNAPSHOT first.txt\r\nfirst\r\nEND SNAPSHOT\r\nSNAPSHOT nested/second.txt\nsecond\n\nEND SNAPSHOT\n'), {
     'first.txt': 'first\r\n',
