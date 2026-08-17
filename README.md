@@ -60,6 +60,17 @@ nor `--json` output when snapshot parsing fails.
 
 Import from `repo-fixture-refresh-skill` to build local-first automation around the same deterministic planner.
 
+## Installed package
+
+Install the package and inspect the supported commands through its executable:
+
+```bash
+npm install repo-fixture-refresh-skill
+npx repo-fixture-refresh --help
+```
+
+The package includes its MIT license and exposes repository, issue tracker, and homepage metadata through npm.
+
 ```js
 import { planRefresh, renderMarkdown } from 'repo-fixture-refresh-skill';
 
