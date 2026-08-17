@@ -33,7 +33,9 @@ function save(file: string | undefined, body: string) {
 
 try {
   const command = process.argv[2];
-  if (command === 'plan') {
+  if (command === '--help' || command === '-h') {
+    console.log(usage);
+  } else if (command === 'plan') {
     const parsed = parse(process.argv.slice(3), new Set(['--repo', '--log', '--out', '--json']), new Set());
     if (parsed.positionals.length) throw new Error(`unexpected argument: ${parsed.positionals[0]}`);
     const log = parsed.values.get('--log');

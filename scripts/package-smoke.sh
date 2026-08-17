@@ -7,6 +7,8 @@ trap 'rm -rf "$smoke_root"' EXIT
 
 npm pack --pack-destination "$smoke_root" >/dev/null
 package_tarball=$(find "$smoke_root" -maxdepth 1 -name '*.tgz' -print -quit)
+tar -xOf "$package_tarball" package/LICENSE > "$smoke_root/packed-license"
+cmp "$project_root/LICENSE" "$smoke_root/packed-license"
 if tar -tzf "$package_tarball" | grep -q '^package/dist/test/'; then
   echo 'package contains compiled test artifacts under dist/test' >&2
   exit 1
@@ -15,6 +17,19 @@ mkdir "$smoke_root/consumer"
 cd "$smoke_root/consumer"
 npm init --yes >/dev/null
 npm install "$package_tarball" >/dev/null
+
+help_output=$(npm exec -- repo-fixture-refresh --help)
+case "$help_output" in
+  "usage: repo-fixture-refresh "*) ;;
+  *) echo 'installed CLI help did not print usage' >&2; exit 1 ;;
+esac
+
+if npm exec -- repo-fixture-refresh unknown >unknown.stdout 2>unknown.stderr; then
+  echo 'unknown command unexpectedly succeeded' >&2
+  exit 1
+fi
+grep -q '^unknown command: unknown$' unknown.stderr
+grep -q '^usage: repo-fixture-refresh ' unknown.stderr
 
 PROJECT_ROOT="$project_root" node --input-type=module <<'EOF'
 import process from 'node:process';
