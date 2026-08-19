@@ -25,10 +25,50 @@ function parse(args: string[], valueOptions: Set<string>, flagOptions: Set<strin
   return { positionals, values, flags };
 }
 
-function save(file: string | undefined, body: string) {
-  if (!file) return;
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, body);
+type Output = { file: string; body: string; temporary?: string; backup?: string; committed?: boolean };
+
+function resolvedDestination(file: string): string {
+  const absolute = path.resolve(file);
+  if (fs.existsSync(absolute)) return fs.realpathSync(absolute);
+  const parent = fs.realpathSync(path.dirname(absolute));
+  return path.join(parent, path.basename(absolute));
+}
+
+function saveOutputs(requested: Array<{ file: string | undefined; body: string }>) {
+  const outputs: Output[] = requested.flatMap(({ file, body }) => file ? [{ file: path.resolve(file), body }] : []);
+  for (const output of outputs) fs.mkdirSync(path.dirname(output.file), { recursive: true });
+  if (outputs.length === 2 && resolvedDestination(outputs[0]!.file) === resolvedDestination(outputs[1]!.file)) {
+    throw new Error('--out and --json must resolve to different files');
+  }
+
+  try {
+    for (const [index, output] of outputs.entries()) {
+      if (fs.existsSync(output.file) && !fs.statSync(output.file).isFile()) throw new Error(`output destination is not a file: ${output.file}`);
+      output.temporary = path.join(path.dirname(output.file), `.${path.basename(output.file)}.${process.pid}.${index}.tmp`);
+      fs.writeFileSync(output.temporary, output.body, { flag: 'wx' });
+    }
+    for (const [index, output] of outputs.entries()) {
+      if (fs.existsSync(output.file)) {
+        output.backup = path.join(path.dirname(output.file), `.${path.basename(output.file)}.${process.pid}.${index}.bak`);
+        fs.renameSync(output.file, output.backup);
+      }
+      fs.renameSync(output.temporary!, output.file);
+      output.temporary = undefined;
+      output.committed = true;
+    }
+    for (const output of outputs) if (output.backup) fs.rmSync(output.backup, { force: true });
+  } catch (error) {
+    for (const output of [...outputs].reverse()) {
+      if (output.backup) {
+        fs.rmSync(output.file, { force: true });
+        if (fs.existsSync(output.backup)) fs.renameSync(output.backup, output.file);
+      } else if (output.committed) {
+        fs.rmSync(output.file, { force: true });
+      }
+      if (output.temporary) fs.rmSync(output.temporary, { force: true });
+    }
+    throw error;
+  }
 }
 
 try {
@@ -42,8 +82,10 @@ try {
     if (!log) throw new Error('missing required option: --log');
     const plan = planRefresh(parsed.values.get('--repo') ?? '.', log);
     const markdown = renderMarkdown(plan);
-    save(parsed.values.get('--out'), markdown);
-    save(parsed.values.get('--json'), `${JSON.stringify(plan, null, 2)}\n`);
+    saveOutputs([
+      { file: parsed.values.get('--out'), body: markdown },
+      { file: parsed.values.get('--json'), body: `${JSON.stringify(plan, null, 2)}\n` },
+    ]);
     if (!parsed.values.has('--out') && !parsed.values.has('--json')) console.log(markdown);
   } else if (command === 'apply') {
     const parsed = parse(process.argv.slice(3), new Set(['--repo', '--approve']), new Set(['--dry-run']));
