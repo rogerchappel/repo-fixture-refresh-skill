@@ -88,6 +88,34 @@ test('CLI rejects invalid logs without creating either plan output', () => {
   assert.equal(fs.existsSync(json), false);
   fs.rmSync(root, { recursive: true, force: true });
 });
+test('CLI rejects colliding plan outputs without creating a file', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'repo-fixture-refresh-cli-'));
+  const repo = path.join(root, 'repo'); fs.mkdirSync(repo);
+  const log = path.join(root, 'latest.log'); fs.writeFileSync(log, 'SNAPSHOT fixture.txt\nplanned\nEND SNAPSHOT\n');
+  const output = path.join(root, 'plan');
+
+  const result = cli('plan', '--repo', repo, '--log', log, '--out', output, '--json', output);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /--out and --json must resolve to different files/);
+  assert.equal(result.stdout, '');
+  assert.equal(fs.existsSync(output), false);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+test('CLI preserves both final outputs when the second destination is invalid', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'repo-fixture-refresh-cli-'));
+  const repo = path.join(root, 'repo'); fs.mkdirSync(repo);
+  const log = path.join(root, 'latest.log'); fs.writeFileSync(log, 'SNAPSHOT fixture.txt\nplanned\nEND SNAPSHOT\n');
+  const markdown = path.join(root, 'plan.md'); fs.writeFileSync(markdown, 'existing markdown\n');
+  const jsonDirectory = path.join(root, 'json-directory'); fs.mkdirSync(jsonDirectory);
+
+  const result = cli('plan', '--repo', repo, '--log', log, '--out', markdown, '--json', jsonDirectory);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /output destination is not a file/);
+  assert.equal(result.stdout, '');
+  assert.equal(fs.readFileSync(markdown, 'utf8'), 'existing markdown\n');
+  assert.deepEqual(fs.readdirSync(jsonDirectory), []);
+  fs.rmSync(root, { recursive: true, force: true });
+});
 test('plans and writes a fixture whose parent directories do not exist', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'repo-fixture-refresh-'));
   const repo = path.join(root, 'repo'); fs.mkdirSync(repo);
