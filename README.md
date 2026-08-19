@@ -16,6 +16,10 @@ npm exec -- repo-fixture-refresh apply .tmp/fixture-refresh.json --approve safe-
 path, optional `--repo`, `--dry-run`, and `--approve safe-only|all` (default:
 `safe-only`). Unknown, repeated, or incomplete options are rejected.
 
+When both plan outputs are requested, `--out` and `--json` must resolve to
+different files. The CLI stages both outputs before replacing either final file;
+if either destination cannot be written, neither output is created or overwritten.
+
 Apply rechecks every approved target against the state captured by `plan`. If a
 target was modified, deleted, or created since planning, the command reports all
 conflicts, exits unsuccessfully, and writes nothing. This check also runs during
