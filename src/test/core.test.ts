@@ -33,6 +33,44 @@ test('rejects malformed saved-plan change fields and statuses', () => {
   ];
   for (const [value, message] of cases) assert.throws(() => validateRefreshPlan(value), message);
 });
+test('rejects actionable changes without after and duplicate targets before repository access', () => {
+  const missingRepo = '/path/that/does/not/exist';
+  const base = { repo: missingRepo, log: '', checklist: [] };
+  assert.throws(
+    () => applyPlan({ ...base, changes: [{ file: 'missing.txt', status: 'safe-update', reason: '' }] } as never, 'safe-only', false),
+    /plan\.changes\[0\]\.after must be a string for safe-update/,
+  );
+  assert.throws(
+    () => applyPlan({ ...base, changes: [
+      { file: 'duplicate.txt', status: 'safe-update', reason: '', after: 'first\n' },
+      { file: 'duplicate.txt', status: 'needs-review', reason: '', after: 'second\n' },
+    ] } as never, 'all', false),
+    /plan\.changes\[1\]\.file duplicates an earlier change target: duplicate\.txt/,
+  );
+});
+test('CLI rejects missing-after and duplicate-target plans without partial writes', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'repo-fixture-refresh-cli-'));
+  const repo = path.join(root, 'repo'); fs.mkdirSync(repo);
+  const target = path.join(repo, 'duplicate.txt'); fs.writeFileSync(target, 'original\n');
+  const planFile = path.join(root, 'plan.json');
+  const plans = [
+    { changes: [{ file: 'missing.txt', status: 'safe-update', reason: '' }], message: /after must be a string for safe-update/ },
+    { changes: [
+      { file: 'duplicate.txt', status: 'safe-update', reason: '', before: 'original\n', after: 'first\n' },
+      { file: 'duplicate.txt', status: 'safe-update', reason: '', before: 'original\n', after: 'second\n' },
+    ], message: /duplicates an earlier change target/ },
+  ];
+  for (const example of plans) {
+    fs.writeFileSync(planFile, JSON.stringify({ repo, log: '', checklist: [], changes: example.changes }));
+    const result = cli('apply', planFile, '--approve', 'safe-only', '--repo', repo);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, example.message);
+    assert.equal(result.stdout, '');
+    assert.equal(fs.readFileSync(target, 'utf8'), 'original\n');
+    assert.equal(fs.existsSync(path.join(repo, 'missing.txt')), false);
+  }
+  fs.rmSync(root, { recursive: true, force: true });
+});
 test('library rejects malformed plans before accessing the repository', () => {
   const malformed = { repo: '/path/that/does/not/exist', log: '', changes: {}, checklist: [] };
   assert.throws(() => applyPlan(malformed as never, 'safe-only', false), /plan\.changes must be an array/);
