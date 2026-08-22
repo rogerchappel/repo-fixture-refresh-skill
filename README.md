@@ -64,6 +64,11 @@ nor `--json` output when snapshot parsing fails.
 
 Import from `repo-fixture-refresh-skill` to build local-first automation around the same deterministic planner.
 
+Saved plan JSON must contain unique `changes[].file` targets. Every actionable
+`safe-update` or `needs-review` change must also contain a string `after` value;
+invalid plans are rejected before the repository is accessed or any fixture is
+written.
+
 ## Installed package
 
 Install the package and inspect the supported commands through its executable:
