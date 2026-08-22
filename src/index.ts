@@ -21,15 +21,21 @@ export function validateRefreshPlan(value: unknown): asserts value is RefreshPla
   if (!Array.isArray(value.checklist)) throw new Error('plan.checklist must be an array');
   value.checklist.forEach((item, index) => planString(item, `plan.checklist[${index}]`));
   if (!Array.isArray(value.changes)) throw new Error('plan.changes must be an array');
+  const files = new Set<string>();
   value.changes.forEach((change, index) => {
     const field = `plan.changes[${index}]`;
     planObject(change, field);
     planString(change.file, `${field}.file`);
+    if (files.has(change.file)) throw new Error(`${field}.file duplicates an earlier change target: ${change.file}`);
+    files.add(change.file);
     planString(change.status, `${field}.status`);
     if (!['unchanged', 'safe-update', 'needs-review'].includes(change.status)) throw new Error(`${field}.status must be unchanged, safe-update, or needs-review`);
     planString(change.reason, `${field}.reason`);
     if (change.before !== undefined) planString(change.before, `${field}.before`);
     if (change.after !== undefined) planString(change.after, `${field}.after`);
+    if ((change.status === 'safe-update' || change.status === 'needs-review') && typeof change.after !== 'string') {
+      throw new Error(`${field}.after must be a string for ${change.status}`);
+    }
   });
 }
 function validateSnapshotPath(file: string, line: number): void {
@@ -131,5 +137,5 @@ export function applyPlan(plan: RefreshPlan, approve: 'safe-only' | 'all', dryRu
       fs.writeFileSync(target, change.after);
     }
   }
-  return approved.map(change => change.file);
+  return targets.map(({ change }) => change.file);
 }
