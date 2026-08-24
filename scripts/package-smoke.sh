@@ -5,6 +5,14 @@ project_root=$(pwd)
 smoke_root=$(mktemp -d "${TMPDIR:-/tmp}/repo-fixture-refresh-package.XXXXXX")
 trap 'rm -rf "$smoke_root"' EXIT
 
+grep -Fq 'The package is not published to the npm registry yet.' README.md
+grep -Fq 'npm install /tmp/repo-fixture-refresh-skill-0.1.0.tgz' README.md
+grep -Fq 'npm exec -- repo-fixture-refresh --help' README.md
+if grep -Fxq 'npm install repo-fixture-refresh-skill' README.md; then
+  echo 'README advertises the unavailable registry install as executable' >&2
+  exit 1
+fi
+
 npm pack --pack-destination "$smoke_root" >/dev/null
 package_tarball=$(find "$smoke_root" -maxdepth 1 -name '*.tgz' -print -quit)
 tar -xOf "$package_tarball" package/LICENSE > "$smoke_root/packed-license"
