@@ -71,12 +71,23 @@ written.
 
 ## Installed package
 
-Install the package and inspect the supported commands through its executable:
+The package is not published to the npm registry yet. From a source checkout,
+build a tarball, install it in a clean consumer directory, and inspect the
+supported commands through its executable:
 
 ```bash
-npm install repo-fixture-refresh-skill
-npx repo-fixture-refresh --help
+npm ci
+npm run build
+npm pack --pack-destination /tmp
+mkdir /tmp/repo-fixture-refresh-consumer
+cd /tmp/repo-fixture-refresh-consumer
+npm init --yes
+npm install /tmp/repo-fixture-refresh-skill-0.1.0.tgz
+npm exec -- repo-fixture-refresh --help
 ```
+
+After the package is published, `npm install repo-fixture-refresh-skill` will
+be the registry install command. Until then, that command is unavailable.
 
 The package includes its MIT license and exposes repository, issue tracker, and homepage metadata through npm.
 
