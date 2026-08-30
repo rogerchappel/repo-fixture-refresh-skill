@@ -176,7 +176,7 @@ test('rejects a plan when an existing target was modified', () => {
 
   fs.writeFileSync(target, 'newer user change\n');
   assert.throws(() => applyPlan(plan, 'safe-only', false), (error: unknown) => {
-    assert.ok(error instanceof RefreshConflictError);
+    if (!(error instanceof RefreshConflictError)) return false;
     assert.deepEqual(error.conflicts, [{ file: 'fixture.txt', reason: 'target was modified after this plan was generated' }]);
     return true;
   });
@@ -219,7 +219,7 @@ test('reports every conflict without partially applying a multi-change plan, inc
 
   for (const dryRun of [true, false]) {
     assert.throws(() => applyPlan(plan, 'safe-only', dryRun), (error: unknown) => {
-      assert.ok(error instanceof RefreshConflictError);
+      if (!(error instanceof RefreshConflictError)) return false;
       assert.deepEqual(error.conflicts.map(conflict => conflict.file), ['second.txt', 'third.txt']);
       return true;
     });
