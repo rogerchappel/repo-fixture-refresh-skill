@@ -2,6 +2,10 @@
 
 Plans stale fixture refreshes from latest local command logs without unsafe rewrites.
 
+Maintainer builds use the Node type environment declared in `tsconfig.json` and
+the current TypeScript and `@types/node` majors. Run the checks with the Node
+version used by the repository workflow when updating this toolchain.
+
 ## Quickstart
 
 ```bash

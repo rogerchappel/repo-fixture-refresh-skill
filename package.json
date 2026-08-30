@@ -46,7 +46,7 @@
   },
   "homepage": "https://github.com/rogerchappel/repo-fixture-refresh-skill#readme",
   "devDependencies": {
-    "@types/node": "^20.14.10",
-    "typescript": "^5.5.4"
+    "@types/node": "^26.4.0",
+    "typescript": "^7.0.2"
   }
 }
