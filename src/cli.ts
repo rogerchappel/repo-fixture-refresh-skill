@@ -30,20 +30,26 @@ type Output = { file: string; body: string; temporary?: string; backup?: string;
 function resolvedDestination(file: string): string {
   const absolute = path.resolve(file);
   if (fs.existsSync(absolute)) return fs.realpathSync(absolute);
-  const parent = fs.realpathSync(path.dirname(absolute));
-  return path.join(parent, path.basename(absolute));
+  let ancestor = path.dirname(absolute);
+  while (!fs.existsSync(ancestor)) ancestor = path.dirname(ancestor);
+  if (!fs.statSync(ancestor).isDirectory()) throw new Error(`output parent is not a directory: ${ancestor}`);
+  return path.join(fs.realpathSync(ancestor), path.relative(ancestor, absolute));
 }
 
 function saveOutputs(requested: Array<{ file: string | undefined; body: string }>) {
   const outputs: Output[] = requested.flatMap(({ file, body }) => file ? [{ file: path.resolve(file), body }] : []);
-  for (const output of outputs) fs.mkdirSync(path.dirname(output.file), { recursive: true });
-  if (outputs.length === 2 && resolvedDestination(outputs[0]!.file) === resolvedDestination(outputs[1]!.file)) {
+  const destinations = outputs.map(output => {
+    const destination = resolvedDestination(output.file);
+    if (fs.existsSync(output.file) && !fs.statSync(output.file).isFile()) throw new Error(`output destination is not a file: ${output.file}`);
+    return destination;
+  });
+  if (destinations.length === 2 && destinations[0] === destinations[1]) {
     throw new Error('--out and --json must resolve to different files');
   }
+  for (const output of outputs) fs.mkdirSync(path.dirname(output.file), { recursive: true });
 
   try {
     for (const [index, output] of outputs.entries()) {
-      if (fs.existsSync(output.file) && !fs.statSync(output.file).isFile()) throw new Error(`output destination is not a file: ${output.file}`);
       output.temporary = path.join(path.dirname(output.file), `.${path.basename(output.file)}.${process.pid}.${index}.tmp`);
       fs.writeFileSync(output.temporary, output.body, { flag: 'wx' });
     }
