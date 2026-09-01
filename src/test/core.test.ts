@@ -139,6 +139,33 @@ test('CLI rejects colliding plan outputs without creating a file', () => {
   assert.equal(fs.existsSync(output), false);
   fs.rmSync(root, { recursive: true, force: true });
 });
+test('CLI rejects colliding plan outputs without creating their missing parent', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'repo-fixture-refresh-cli-'));
+  const repo = path.join(root, 'repo'); fs.mkdirSync(repo);
+  const log = path.join(root, 'latest.log'); fs.writeFileSync(log, 'SNAPSHOT fixture.txt\nplanned\nEND SNAPSHOT\n');
+  const parent = path.join(root, 'new-parent');
+  const output = path.join(parent, 'plan');
+
+  const result = cli('plan', '--repo', repo, '--log', log, '--out', output, '--json', output);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /--out and --json must resolve to different files/);
+  assert.equal(result.stdout, '');
+  assert.equal(fs.existsSync(parent), false);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+test('CLI creates missing output parents after validating both destinations', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'repo-fixture-refresh-cli-'));
+  const repo = path.join(root, 'repo'); fs.mkdirSync(repo);
+  const log = path.join(root, 'latest.log'); fs.writeFileSync(log, 'SNAPSHOT fixture.txt\nplanned\nEND SNAPSHOT\n');
+  const markdown = path.join(root, 'reports', 'markdown', 'plan.md');
+  const json = path.join(root, 'reports', 'json', 'plan.json');
+
+  const result = cli('plan', '--repo', repo, '--log', log, '--out', markdown, '--json', json);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(fs.existsSync(markdown), true);
+  assert.equal(fs.existsSync(json), true);
+  fs.rmSync(root, { recursive: true, force: true });
+});
 test('CLI preserves both final outputs when the second destination is invalid', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'repo-fixture-refresh-cli-'));
   const repo = path.join(root, 'repo'); fs.mkdirSync(repo);

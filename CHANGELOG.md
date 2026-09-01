@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Validate plan output destinations before creating parent directories or staging
+  files, so rejected colliding outputs leave the filesystem unchanged.
+
 - Reject malformed or ambiguous snapshot logs before creating plan output,
   while preserving newline fidelity for valid multi-snapshot logs.
 - Expose the documented package-root library import with JavaScript and
