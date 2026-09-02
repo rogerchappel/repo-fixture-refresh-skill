@@ -8,6 +8,25 @@ test('validates a generated plan after a JSON round trip', () => {
   validateRefreshPlan(plan);
   assert.deepEqual(applyPlan(plan, 'safe-only', true), ['fixtures/output.txt']);
 });
+test('generated plans retain their repository across working-directory changes', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'repo-fixture-refresh-path-'));
+  const planningDirectory = path.join(root, 'planning');
+  const repo = path.join(planningDirectory, 'repo');
+  fs.mkdirSync(repo, { recursive: true });
+  const log = path.join(root, 'latest.log');
+  fs.writeFileSync(log, 'SNAPSHOT fixture.txt\nplanned\nEND SNAPSHOT\n');
+  const previous = process.cwd();
+  try {
+    process.chdir(planningDirectory);
+    const plan = planRefresh('repo', log);
+    process.chdir(root);
+    assert.deepEqual(applyPlan(plan, 'safe-only', true), ['fixture.txt']);
+    assert.equal(plan.repo, fs.realpathSync(repo));
+  } finally {
+    process.chdir(previous);
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
 test('rejects malformed saved-plan roots and collection fields', () => {
   const cases: Array<[unknown, RegExp]> = [
     [null, /plan must be an object/],
@@ -286,6 +305,24 @@ test('CLI plan and apply accept the documented argument forms', () => {
   assert.equal(applied.status, 0, applied.stderr);
   assert.equal(applied.stdout, 'would write: fixture.txt\n');
   assert.equal(fs.existsSync(path.join(repo, 'fixture.txt')), false);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+test('CLI applies a saved relative-repository plan from another directory', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'repo-fixture-refresh-cli-path-'));
+  const planningDirectory = path.join(root, 'planning');
+  const repo = path.join(planningDirectory, 'repo');
+  fs.mkdirSync(repo, { recursive: true });
+  const log = path.join(root, 'latest.log');
+  fs.writeFileSync(log, 'SNAPSHOT fixture.txt\nplanned\nEND SNAPSHOT\n');
+  const planFile = path.join(planningDirectory, 'plan.json');
+
+  const planned = spawnSync(process.execPath, [path.resolve('dist/cli.js'), 'plan', '--repo', 'repo', '--log', log, '--json', planFile], { cwd: planningDirectory, encoding: 'utf8' });
+  assert.equal(planned.status, 0, planned.stderr);
+  const saved = JSON.parse(fs.readFileSync(planFile, 'utf8'));
+  assert.equal(saved.repo, fs.realpathSync(repo));
+  const applied = spawnSync(process.execPath, [path.resolve('dist/cli.js'), 'apply', planFile, '--dry-run'], { cwd: root, encoding: 'utf8' });
+  assert.equal(applied.status, 0, applied.stderr);
+  assert.equal(applied.stdout, 'would write: fixture.txt\n');
   fs.rmSync(root, { recursive: true, force: true });
 });
 test('CLI rejects invalid arguments before creating output', () => {
