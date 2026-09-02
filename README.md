@@ -38,6 +38,12 @@ with string `file`, `reason`, and `status` fields. `status` must be `unchanged`,
 `safe-update`, or `needs-review`; optional `before` and `after` fields must be
 strings when present. Additional fields are ignored for forward compatibility.
 
+`plan` resolves `repo` to its canonical absolute path before saving or
+returning the plan. A relative `--repo` is therefore anchored to the planning
+process's current directory, and the saved plan can be applied from another
+directory without a `--repo` override. An explicit apply-time `--repo` still
+replaces the saved target when a reviewed plan must be redirected deliberately.
+
 Both the library `applyPlan` function and the CLI validate this contract before
 checking or writing any target. Invalid plans fail with a field-specific message
 such as `plan.changes[0].status must be unchanged, safe-update, or needs-review`;
