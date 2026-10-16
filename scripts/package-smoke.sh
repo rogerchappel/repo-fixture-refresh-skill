@@ -24,7 +24,7 @@ fi
 mkdir "$smoke_root/consumer"
 cd "$smoke_root/consumer"
 npm init --yes >/dev/null
-npm install "$package_tarball" >/dev/null
+npm install --ignore-scripts "$package_tarball" >/dev/null
 
 help_output=$(npm exec -- repo-fixture-refresh --help)
 case "$help_output" in
